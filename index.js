@@ -3,16 +3,28 @@ const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
 const devGuild = process.env.DISCORD_DEV_GUILD;
 
+const fs = require('fs/promises');
 const { Client, Intents } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
 
-const commands = [
-    {
-        name: 'ping',
-        description: 'pong',
-    },
-];
+/**
+ * @type {{ string: import('./typedefs').ToasterFunction}}
+ */
+const commandMapping = {};
+
+/**
+ * @returns {Promise<import('./typedefs').ToasterCommand[]>}
+ */
+const commandsLoader = async function () {
+    const modules = await fs.readdir(__dirname + '/commands');
+    const commands = [];
+    for (const moduleName of modules) {
+        const module = await import(__dirname + '/commands/' + moduleName);
+        commands.push(module.default);
+    }
+    return commands;
+};
 
 const rest = new REST({ version: 10 }).setToken(token);
 // Create a new client instance
@@ -21,19 +33,25 @@ const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
 // When the client is ready, run this code (only once)
 client.once('ready', async () => {
     console.log('Refreshing commands...');
-    await rest.put(Routes.applicationGuildCommands(clientId, devGuild), { body: commands });
+    const commands = await commandsLoader();
+    const interactions = commands.map((command) => {
+        commandMapping[command.name] = command.f;
+        return {
+            name: command.name,
+            description: command.description,
+        };
+    });
+    await rest.put(Routes.applicationGuildCommands(clientId, devGuild), { body: interactions });
     console.log('Ready!');
 });
 
 client.on('interactionCreate', async (interaction) => {
-    console.log(interaction);
+
     if (!interaction.isCommand()) return;
 
-    if (interaction.commandName == 'ping') {
-        await interaction.reply({
-            fetchReply: true,
-            content: '*unzips dick*',
-        });
+    const f = commandMapping[interaction.commandName];
+    if (f) {
+        await interaction.reply(f(interaction));
     }
 });
 
