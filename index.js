@@ -1,7 +1,5 @@
 require('dotenv').config();
 const token = process.env.DISCORD_TOKEN;
-const clientId = process.env.DISCORD_CLIENT_ID;
-const devGuild = process.env.DISCORD_DEV_GUILD;
 
 const fs = require('fs/promises');
 const { Client, Intents } = require('discord.js');
@@ -41,7 +39,10 @@ client.once('ready', async () => {
             description: command.description,
         };
     });
-    await rest.put(Routes.applicationGuildCommands(clientId, devGuild), { body: interactions });
+    for (const [id, guild] of await client.guilds.fetch()) {
+        console.log(`Registering commands for guild ${guild.name}`);
+        await rest.put(Routes.applicationGuildCommands(client.application.id, id), { body: interactions });
+    }
     console.log('Ready!');
 });
 
